@@ -17,4 +17,4 @@ Bibliotecas necessárias:
   
 Como utilizar?
 
-  Após instalar as bibliotecas, é necessário rodar os programas para criar as pastas necessárias, após rodar, é preciso colocar alguma playlist (.bplist/json) dentro da pasta Playlists, depois é só abrir o programa que irá começar a pegar as informações da Api do Beat Saver e logo após isso vai baixar as músicas.
+  Após instalar as bibliotecas, é necessário rodar os programas para criar as pastas necessárias, após rodar, é preciso colocar alguma playlist (.bplist/json) dentro da pasta Playlists, depois é só abrir o programa que irá começar a pegar as informações da Api do Beat Saver e logo após isso vai baixar as músicas na pasta Músicas.

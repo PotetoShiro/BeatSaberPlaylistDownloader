@@ -74,6 +74,7 @@ async function CreateJsonConfig(logFileDir) {
 } // Cria o Config.Json.
 
 function CreateDirs(logFileDir, dirs) {
+    // Dirs recebe uma lista e não o nome
     for (i = 0; i < dirs.length; i++ ) {
         let dirsName = dirs[i];
         let log;
@@ -182,11 +183,11 @@ async function ReadPlayLists(logFileDir) {
         deleteplaylists.splice(deleteplaylists[i], 1);
 
     }
-
+    let dirsName = []
     for (i = 0; i < playlist.length; i++) {
-        CreateDirs(logFileDir, [`./Musicas/${playlist[i].name}`]);
+        dirsName.push(`./Musicas/${playlist[i].name}`)
     }
-
+    CreateDirs(logFileDir, dirsName);
 
     return playlist;
 } // Olha todas as playlists e adiciona as informações delas dentro de um obj que está em uma array

@@ -107,7 +107,7 @@ function ConfigWrite(logFileDir) {
 
 async function ConfigRead(logFileDir) {
     let data = await fs.readFileSync('Config.json');
-    let config = JSON.parse(data)
+    let config = JSON.parse(data);
     //let maxSimultaneousDownloads = config.maxSimultaneousDownloads;
     let limitDownloadperMinuteTimer = config.limitDownloadperMinuteTimer;
     let limitDownloadperMinute = config.limitDownloadperMinute;
@@ -117,7 +117,7 @@ async function ConfigRead(logFileDir) {
         if (i == 0) log = `[${fileDate()}] Leitura do arquivo Config.json Finalizada.`;
         else log = `[${fileDate()}] limitDownloadperMinuteTimer: ${limitDownloadperMinuteTimer}, limitDownloadperMinute: ${limitDownloadperMinute}.`;
 
-        WriteLog(logFileDir, log)
+        WriteLog(logFileDir, log);
     }
 
     return config;
@@ -133,7 +133,7 @@ async function ReadPlayLists(logFileDir) {
     let log;
     if (files.length == 0) return false;
 
-    for (i = 0; i < files.length; i++) {
+    for (let i = 0; i < files.length; i++) {
         log = `[${fileDate()}] Pegando Hash da Playlist ${files[i]}.`;
         WriteLog(logFileDir, log);
 
@@ -144,15 +144,9 @@ async function ReadPlayLists(logFileDir) {
             let playlistAuthor = playlistInfo.playlistAuthor;
             let playlistSongs = playlistInfo.songs;
             let bpfile = files[i].indexOf('.bplist');
-
             if (bpfile) {
-                for (j = 0; j < playlistSongs.length; j++) {
-                    delete playlistSongs[j].key;
-                    delete playlistSongs[j].songName;
-                    delete playlistSongs[j].levelAuthorName;
-                    delete playlistSongs[j].levelid;
-                    delete playlistSongs[j].dateAdded;
-                }
+
+                playlistSongs = await BplistToJson(playlistSongs);
             }
             if (playlistName != undefined && playlistAuthor != undefined && playlistSongs != undefined) {
                 playlist.push({
@@ -177,21 +171,30 @@ async function ReadPlayLists(logFileDir) {
     WriteLog(logFileDir, log);
 
         // Deleta playlist
-    for (i = 0; i < deleteplaylists.length; i++) {
+    for (let i = 0; i < deleteplaylists.length; i++) {
         let findPlaylist = files.indexOf(deleteplaylists[i]);
         files.splice(findPlaylist, 1);
         deleteplaylists.splice(deleteplaylists[i], 1);
 
     }
     let dirsName = [];
-    for (i = 0; i < playlist.length; i++) {
+    for (let i = 0; i < playlist.length; i++) {
         dirsName.push(`./Musicas/${playlist[i].name}`);
     }
-    CreateDirs(logFileDir, dirsName);
-
+    await CreateDirs(logFileDir, dirsName);
     return playlist;
 } // Olha todas as playlists e adiciona as informações delas dentro de um obj que está em uma array
 
+async function BplistToJson(playlist) {
+    for (j = 0; j < playlist.length; j++) {
+        delete playlist[j].key;
+        delete playlist[j].songName;
+        delete playlist[j].levelAuthorName;
+        delete playlist[j].levelid;
+        delete playlist[j].dateAdded;
+    }
+    return playlist;
+}
 async function CatchBeatSaverApiDownload(logFileDir, playlist, config) {
     // Lendo Configurações
     let limit = config.limitDownloadperMinute;
@@ -203,72 +206,69 @@ async function CatchBeatSaverApiDownload(logFileDir, playlist, config) {
     log = `[${fileDate()}] Configuração do download: Timer: ${timer}, Limite: ${limit}.`;
     WriteLog(logFileDir, log);
 
-    for (i = 0; i < playlist.length; i++) {
-        let lastSeconds = new Date().getSeconds();
-        let lastMinutes = new Date().getMinutes();
+    let lastSeconds = new Date().getSeconds();
+    let lastMinutes = new Date().getMinutes();
 
-        log = `[${fileDate()}] Pegando link de download das músicas da Playlist: ${playlist[i].name}.`;
-        WriteLog(logFileDir, log);
-        for (j = 0; j < playlist[i].songs.length; j++) {
-            let currentMinutes = new Date().getMinutes();
-            let currentSeconds = new Date().getSeconds();
+    log = `[${fileDate()}] Pegando link de download das músicas da Playlist: ${playlist.name}.`;
+    WriteLog(logFileDir, log);
+    for (j = 0; j < playlist.songs.length; j++) {
+        let currentMinutes = new Date().getMinutes();
+        let currentSeconds = new Date().getSeconds();
 
-            if (current == 30 && lastMinutes + 1 == currentMinutes && lastSeconds == currentSeconds) log = `[${fileDate()}] Limite de downloads por minuto atingindo! Ativando Timer.`;
-            else log = `[${fileDate()}] Playlist: ${playlist[i].name}, Música: ${j+1}/${playlist[i].songs.length}. Status: `;
+        if (current == 30 && lastMinutes + 1 == currentMinutes && lastSeconds == currentSeconds) log = `[${fileDate()}] Limite de downloads por minuto atingindo! Ativando Timer.`;
+        else log = `[${fileDate()}] Playlist: ${playlist.name}, Música: ${j+1}/${playlist.songs.length}. Status: `;
 
-            if (log.indexOf('Status') != -1) WriteLog(logFileDir, log, 'Stdout');
-            else WriteLog(logFileDir, log);
+        if (log.indexOf('Status') != -1) WriteLog(logFileDir, log, 'Stdout');
+        else WriteLog(logFileDir, log);
 
-            if (current == 30 && lastMinutes + 1 == currentMinutes && lastSeconds == currentSeconds) {
-                Sleep(timer, () => {});
-                current = 0;
-            }
+        if (current == 30 && lastMinutes + 1 == currentMinutes && lastSeconds == currentSeconds) {
+            Sleep(timer, () => {});
+            current = 0;
+        }
+        let hash = playlist.songs[j].hash.toLowerCase();
+        let url = `https://beatsaver.com/api/maps/by-hash/${hash}`;
 
-            let hash = playlist[i].songs[j].hash.toLowerCase();
-            let url = `https://beatsaver.com/api/maps/by-hash/${hash}`;
+        // Abre o Browser e a página, entra na Api e pega as informações
 
-            // Abre o Browser e a página, entra na Api e pega as informações
-
-            let browser = await puppeteer.launch({
-                headless: true
-                });
-
-            let page = await browser.newPage();
-            await page.goto(url, { waitUntil: 'networkidle2'});
-
-            let musicInfo = await page.evaluate(() => {
-                let data = document.querySelector('body > pre').innerText;
-                return data;
+        let browser = await puppeteer.launch({
+            headless: true
             });
-            let status;
-            // Estado da música
-            if (musicInfo == 'Not Found') {
-                status =  'Não encontrada';
-                notFoundMusics.push(playlist[i].songs[j]);
-            } else {
-                // Transforma em json
-                musicInfo = JSON.parse(musicInfo);
-                //Adiciona o link para download
-                let directDownload = musicInfo.directDownload;
-                let songName = musicInfo.metadata.songName;
-                let levelAuthorName = musicInfo.metadata.levelAuthorName;
-                let musicKey = musicInfo.key;
-                playlist[i].songs[j].directDownload = `https://beatsaver.com${directDownload}`;
-                playlist[i].songs[j].songName = songName;
-                playlist[i].songs[j].levelauthorName = levelAuthorName;
-                playlist[i].songs[j].key = musicKey;
-                status =  'Encontrada';
-            }
-            log = status;
-            WriteLog(logFileDir, `${status}\n`, 'Stdout');
 
-            await browser.close();
-            current++;
+        let page = await browser.newPage();
+        await page.goto(url, { waitUntil: 'networkidle2'});
+
+        let musicInfo = await page.evaluate(() => {
+            let data = document.querySelector('body > pre').innerText;
+            return data;
+        });
+        let status;
+        // Estado da música
+        if (musicInfo == 'Not Found') {
+            status =  'Não encontrada';
+            notFoundMusics.push(playlist.songs[j]);
+        } else {
+            // Transforma em json
+            musicInfo = JSON.parse(musicInfo);
+            //Adiciona o link para download
+            let directDownload = musicInfo.directDownload;
+            let songName = musicInfo.metadata.songName;
+            let levelAuthorName = musicInfo.metadata.levelAuthorName;
+            let musicKey = musicInfo.key;
+            playlist.songs[j].directDownload = `https://beatsaver.com${directDownload}`;
+            playlist.songs[j].songName = songName;
+            playlist.songs[j].levelauthorName = levelAuthorName;
+            playlist.songs[j].key = musicKey;
+            status =  'Encontrada';
         }
-        for (k = 0; k < notFoundMusics.length;k++) {
-            let find = playlist[i].songs.indexOf(notFoundMusics[k]);
-            playlist[i].songs.splice(find, 1);
-        }
+        log = status;
+        WriteLog(logFileDir, `${status}\n`, 'Stdout');
+
+        await browser.close();
+        current++;
+    }
+    for (k = 0; k < notFoundMusics.length;k++) {
+            let find = playlist.songs.indexOf(notFoundMusics[k]);
+            playlist.songs.splice(find, 1);
     }
 
     return playlist;
@@ -283,82 +283,106 @@ function Sleep(time, callback) {
 
 async function DownloadPlaylistsMusic(logFileDir, playlist) {
     let log;
-    // Cada playlist
-    for (i = 0;i < playlist.length;i++) {
-        // Cada música
-        for (j = 0; j < playlist[i].songs.length; j++) {
-            let dirName = playlist[i].name;
-            // Iniciando o navegador
-            const browser = await chromium.launchPersistentContext(path.resolve(__dirname, 'browser'), {
-                acceptDownloads: true,
-                headless: true,
-                downloadsPath: path.resolve(__dirname, `Musicas/${dirName}`)
-            });
-            const page = await browser.newPage();
-            let url = playlist[i].songs[j].directDownload;
-            // Entra no link
-            await page.goto(url).catch(e => {});
-            //Evento de Download
-            const [ download ] = await Promise.all([
-                page.waitForEvent('download'), // wait for download to start
-                log = `[${fileDate()}] Playlist: ${dirName} Música: ${playlist[i].songs[j].songName} [${j+1}/${playlist[i].songs.length}] Download Iniciado.`,
-                WriteLog(logFileDir, log)
-
-            ]);
-            // Se falhar o Download
-            let failure = await download.failure();
-            if (failure != null) {
-                log = `Deu erro no Download da Playlist: ${dirName} Música: ${playlist[i].songs[j].songName} [${j+1}/${playlist[i].songs.length}]`;
-                WriteLog(logFileDir, log);
-            }
-
-            // Configs para a pasta
-            let musicInfo = playlist[i].songs[j];
-            let songName = musicInfo.songName;
-            const filter = ['/', ':', '*', '?', '"', '<', '>', '|'];
-            let levelAuthorName = musicInfo.levelauthorName;
-            let musicKey = musicInfo.key;
-            for(k = 0; k < filter.length; k++) {
-                songName.replaceAll(filter[i], '');
-                levelAuthorName.replaceAll(filter[i], '');
-            }
-            const fileName = `${musicKey} (${songName} - ${levelAuthorName})`;
-            // Salvar a música
-            let downloadPath = await download.path();
-            let musicFile = fs.readFileSync(downloadPath); 
-
-            fs.writeFileSync(`./Musicas/${dirName}/${fileName}.zip`, musicFile);
-            // Finaliza o download
-            await download.delete();
-            await browser.close();
-            log = `[${fileDate()}] Playlist: ${dirName} Música: ${playlist[i].songs[j].songName} [${j+1}/${playlist[i].songs.length}] Download Finalizado.`;
+    // Cada música
+    for (let j = 0; j < playlist.songs.length; j++) {
+        let musicInfo = playlist.songs[j];
+        let songName = musicInfo.songName;
+        let filter = ['/', ':', '*', '?', '"', '<', '>', '|'];
+        let levelAuthorName = musicInfo.levelauthorName;
+        let musicKey = musicInfo.key;
+        for (let k = 0; k < filter.length; k++) {
+            songName = songName.split(filter[k]).join('');
+        }
+        let fileName = `${musicKey} (${songName} - ${levelAuthorName})`;
+        let musicExist = await MusicVerify(playlist.songs[j], `./Musicas/${playlist.name}/`);
+        let dirName = playlist.name;
+        if (musicExist) {
+            log = `[${fileDate()}] Playlist: ${dirName} Música: ${playlist.songs[j].songName} [${j+1}/${playlist.songs.length}] Já Existe.`;
             WriteLog(logFileDir, log);
-            log = `[${fileDate()}] Playlist: ${dirName} Música: ${playlist[i].songs[j].songName} [${j+1}/${playlist[i].songs.length}] Descompactação Iniciada.`;
+        } else {
+            await DownloadMusic([dirName, playlist.songs[j].songName, j+1, playlist.songs.length, playlist.songs[j].directDownload, fileName], logFileDir);
+            log = `[${fileDate()}] Playlist: ${dirName} Música: ${playlist.songs[j].songName} [${j+1}/${playlist.songs.length}] Download Finalizado.`;
             WriteLog(logFileDir, log);
-
-            // Cria a pasta da música
-            await fs.mkdirSync(`./Musicas/${dirName}/${fileName}`, {recursive: true});
-            // Descompactar
-            let zip = new admZip(`./Musicas/${dirName}/${fileName}.zip`);
-            let zipEntries = zip.getEntries();
-            zip.extractAllTo(`./Musicas/${dirName}/${fileName}`, true);
-            // Delete a pasta zip da música
-            fs.unlinkSync(`./Musicas/${dirName}/${fileName}.zip`);
-
-            log = `[${fileDate()}] Playlist: ${dirName} Música: ${playlist[i].songs[j].songName} [${j+1}/${playlist[i].songs.length}] Descompactação Finalizada.`;
+            log = `[${fileDate()}] Playlist: ${dirName} Música: ${playlist.songs[j].songName} [${j+1}/${playlist.songs.length}] Descompactação Iniciada.`;
+            WriteLog(logFileDir, log);    
+            await unzip([dirName, fileName]);
+            log = `[${fileDate()}] Playlist: ${dirName} Música: ${playlist.songs[j].songName} [${j+1}/${playlist.songs.length}] Descompactação Finalizada.`;
             WriteLog(logFileDir, log);
         }
     }
+    
 } // Baixa as músicas da playlist e salva
+
+async function MusicVerify(key, musicdir) {
+    let files = await fs.readdirSync(musicdir);
+    let check = [];
+    let status;
+    for (let i = 0; i < files.length; i++) {
+        if (files[i].indexOf(key.key) != -1) {
+            check.push(true);
+        } else {
+            check.push(false);
+        }
+    }
+    for (let i = 0; i < check.length; i++) {
+        if (check[i]) {
+            status = true;
+        } else if (status != true) {
+            status = false;
+        }
+    }
+    return status; 
+} // Verifica se a música existe
+
+async function DownloadMusic(dirinfo, logFileDir) {
+    let url = dirinfo[4];
+    let browser = await chromium.launchPersistentContext(path.resolve(__dirname, 'browser'), {
+            acceptDownloads: true,
+            headless: true,
+            downloadsPath: path.resolve(__dirname, `Musicas/${dirinfo[0]}`)
+    });
+    let page = await browser.newPage();
+    await page.goto(url).catch(e => {});
+        //Evento de Download
+    let [ download ] = await Promise.all([
+        page.waitForEvent('download'), // wait for download to start
+        log = `[${fileDate()}] Playlist: ${dirinfo[0]} Música: ${dirinfo[1]} [${dirinfo[2]}/${dirinfo[3]}] Download Iniciado.`,
+        WriteLog(logFileDir, log)
+
+    ]);
+    // Se falhar o Download
+    let failure = await download.failure();
+    if (failure != null) {
+        log = `Deu erro no Download da Playlist: ${dirinfo[0]} Música: ${dirinfo[1]} [${dirinfo[2]}/${dirinfo[3]}]`;
+        WriteLog(logFileDir, log);
+    }
+    let downloadPath = await download.path();
+    let musicFile = fs.readFileSync(downloadPath); 
+
+    fs.writeFileSync(`./Musicas/${dirinfo[0]}/${dirinfo[5]}.zip`, musicFile);
+
+    await download.delete();
+    await browser.close();
+
+}
+
+async function unzip(dirinfo) {
+    await fs.mkdirSync(`./Musicas/${dirinfo[0]}/${dirinfo[1]}`, {recursive: true});
+    let zip = new admZip(`./Musicas/${dirinfo[0]}/${dirinfo[1]}.zip`);
+    let zipEntries = zip.getEntries();
+    await zip.extractAllTo(`./Musicas/${dirinfo[0]}/${dirinfo[1]}`, true);
+    await fs.unlinkSync(`./Musicas/${dirinfo[0]}/${dirinfo[1]}.zip`);
+}
 
 async function main() {
     iohook.on("keypress", event => {
         if (event.keychar == 102) process.exit();
     });
     iohook.start();
-    try {
+    //try {
         let logFile = await CreateLog();
         let erro;
+        let currentplaylist;
 
         await CreateJsonConfig(logFile);
         await ConfigWrite(logFile);
@@ -368,8 +392,10 @@ async function main() {
             let config = await ConfigRead(logFile);
             let playlist = await ReadPlayLists(logFile);
             if (playlist != false) {
-                playlist = await CatchBeatSaverApiDownload(logFile, playlist, config);
-                await DownloadPlaylistsMusic(logFile, playlist);
+                for (let i = 0; i < playlist.length;i++) {
+                    currentplaylist = await CatchBeatSaverApiDownload(logFile, playlist[i], config);
+                    await DownloadPlaylistsMusic(logFile, currentplaylist);
+                }
                 WriteLog(logFile, 'Terminei de baixar as músicas');
             } else {
                 erro = 'Não tem playlists na pasta Playlists.';
@@ -381,10 +407,10 @@ async function main() {
             erro = 'As Pastas não Existem.';
             WriteLog(logFile, erro);
         }
-    } catch (e) {
-        erro = `Erro no programa, falar com o criador(Shiro#2985) no discord e mandar isso para ele -> ${e}`;
-        console.log(erro);
-    }
+    //} catch (e) {
+    //   erro = `Erro no programa, fala com o criador(Shiro#2985) no discord e manda isso para ele -> ${e}`;
+    //    console.log(erro);
+    //}
 } // Roda o Programa
 
 main();

@@ -183,9 +183,9 @@ async function ReadPlayLists(logFileDir) {
         deleteplaylists.splice(deleteplaylists[i], 1);
 
     }
-    let dirsName = []
+    let dirsName = [];
     for (i = 0; i < playlist.length; i++) {
-        dirsName.push(`./Musicas/${playlist[i].name}`)
+        dirsName.push(`./Musicas/${playlist[i].name}`);
     }
     CreateDirs(logFileDir, dirsName);
 
@@ -315,8 +315,13 @@ async function DownloadPlaylistsMusic(logFileDir, playlist) {
             // Configs para a pasta
             let musicInfo = playlist[i].songs[j];
             let songName = musicInfo.songName;
-            let levelAuthorName = musicInfo.levelauthorName.replace('/', '');
+            const filter = ['/', ':', '*', '?', '"', '<', '>', '|'];
+            let levelAuthorName = musicInfo.levelauthorName;
             let musicKey = musicInfo.key;
+            for(k = 0; k < filter.length; k++) {
+                songName.replaceAll(filter[i], '');
+                levelAuthorName.replaceAll(filter[i], '');
+            }
             const fileName = `${musicKey} (${songName} - ${levelAuthorName})`;
             // Salvar a música
             let downloadPath = await download.path();
